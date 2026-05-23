@@ -1,191 +1,279 @@
 # TideMemory
 
-**Topological vortex memory using Ginzburg-Landau dynamics — noise-robust, topology-protected information storage.**
+**TideMemory** is an experimental topological field-memory prototype. It stores memory states as vortex winding numbers in a complex-valued field and studies whether field dynamics can provide robust, self-repairing memory under strong storage noise.
+
+Status: **research prototype / experimental**.
+
+This project is not a production RAG replacement. It explores a complementary memory substrate that may be useful for robust long-term AI memory, agent memory, and physics-inspired retrieval systems.
 
 ---
 
-## What is TideMemory?
+## Latest Validation Results
 
-TideMemory stores binary information as **topological winding numbers** (±1) of complex-field vortex lines threading a 3D grid. Because winding numbers are topological invariants, they survive substantial noise — the Ginzburg-Landau (GL) evolution layer acts as a physics-based self-repair process that restores corrupted fields back to their attractor.
+See [RESULTS.md](RESULTS.md) for the latest v3 validation tables.
 
----
+Highlights from the current prototype:
 
-## Architecture
+- Unified clean sanity, N=8: **1.000 +/- 0.000**
+- Unified multi-vortex E_full at sigma=3.0: **1.000**
+- Segmented E_full at sigma=3.0: **0.625**
+- TideMemory at sigma=3.0: **0.550** vs RAG noise-aware **0.338**
+- Multi-symbol probe `{-2, -1, +1, +2}` at sigma=1.2: unified **0.833**
 
-```
-Input x ∈ R^32  +  label n ∈ {-1, +1}
-          │
-          ▼
-  ┌───────────────────┐
-  │  Conditional      │   Linear(33→256) → ReLU → Linear(256→2·G³)
-  │  Encoder          │   output: amp_residual, phi_residual
-  └───────────────────┘
-          │
-          ▼
-  ┌───────────────────┐
-  │  Vortex Template  │   Analytic vortex: ψ_tpl = V_BG·tanh(r/ξ)·exp(i·n·θ)
-  │  × Residual Init  │   ψ₀ = ψ_tpl · exp(i·φ_res) · a_res
-  └───────────────────┘
-          │
-          ▼
-  ┌───────────────────┐
-  │  GL Evolution     │   ∂ψ/∂t = ∇²ψ + α(V²_BG − |ψ|²)ψ
-  │  (self-repair)    │   iterated DT × EVO_STEPS
-  └───────────────────┘
-          │
-          ▼
-  ┌───────────────────┐
-  │  Winding-Number   │   Sample phase on ring of radius R around vortex core
-  │  Readout          │   n̂ = (1/2π) ∮ dθ  →  sign(n̂) = stored bit
-  └───────────────────┘
-```
-
-**Multi-memory extension** (`demo_unified.py`):  
-Partition the z-axis of a `GRID³` field into N equal segments. Each segment independently hosts one vortex, giving N parallel memory channels with zero spatial overlap.
-
-```
-z-axis layout (N=4, GRID=64, k=16):
-  ┌──────────┬──────────┬──────────┬──────────┐
-  │ Memory 0 │ Memory 1 │ Memory 2 │ Memory 3 │
-  │  z:0-15  │  z:16-31 │  z:32-47 │  z:48-63 │
-  └──────────┴──────────┴──────────┴──────────┘
-```
+Important: unified multi-vortex results are in an addressable-memory setting where vortex readout centers are known.
 
 ---
 
-## Core Algorithm
+## Core Idea
 
-| Component | Description |
-|---|---|
-| **Vortex template** | Analytic GL ground state: amplitude `tanh(r/ξ)`, phase `n·atan2(y,x)` |
-| **Residual init** | Neural network predicts small amplitude/phase corrections on top of the template |
-| **GL evolution** | Discrete Euler step of the time-dependent GL equation — drives ψ toward nearest topological attractor |
-| **Winding readout** | Discrete sum of phase increments along a ring contour; gives continuous estimate of integer winding number |
-| **Spatial segmentation** | z-axis partitioned into N bands; each band independent — enables multi-memory without cross-talk |
+TideMemory represents memory using a complex field:
 
-**Loss function** (training):
-
+```text
+psi(x, y, z) in C
 ```
-L = W_wind · ‖n̂ − n‖²       # winding accuracy
-  + W_cons · Var_z(n̂)        # z-slice consistency
-  + W_smooth · ‖∇²ψ‖²        # field smoothness
-  + W_res · ‖residual‖²      # regularize network output
-  + W_bg · bg amplitude loss  # background amplitude
-  + W_core · core amplitude   # vortex core sharpness
+
+A memory item is encoded as a vortex winding state. The readout estimates the winding number:
+
+```text
+n_hat = (1 / 2pi) integral d arg(psi)
 ```
+
+The current prototypes study two storage modes:
+
+1. **Segmented storage**: memory channels occupy separate z-axis segments.
+2. **Unified multi-vortex storage**: multiple vortices coexist in one background field using a phase-superposition ansatz.
+
+The main repair mechanism combines:
+
+- GL-style field relaxation
+- unified background-field projection
+- noise-adaptive resonance frequency
+- robust winding-number readout
 
 ---
 
-## File Structure
+## What This Repository Contains
 
-```
+```text
 TideMemory/
-├── main.py            # Industrial-grade single-memory benchmark
-│                      #   Adam + StepLR + grad clip
-│                      #   5-run statistics with 95% CI
-│                      #   SNR sweep, TPR, attractor-basin, evo-steps, RING_R
-│
-├── plot_results.py    # Visualization suite
-│                      #   Trains network, sweeps all conditions
-│                      #   Outputs: fig1_snr_acc.png
-│                      #            fig2_evo_steps.png
-│                      #            fig3_ring_r.png
-│
-├── demo_unified.py    # Multi-memory experiment (spatial z-segmentation)
-│                      #   Capacity curve: N = 1,2,4,8,16,32
-│                      #   AI retrieval: TideMemory vs RAG (cosine)
-│                      #   Outputs: fig8_segment_capacity.png
-│                      #            fig9_segment_vs_rag.png
-│
-└── figures/           # All output PNG figures
+├── README.md
+├── LICENSE
+├── requirements.txt
+├── .gitignore
+├── main.py                    # older single-memory benchmark
+├── plot_results.py            # older plotting utilities
+├── demo_unified.py            # original multi-memory demo
+├── demo_unified_v2.py         # optimized segmented-memory demo + RAG comparison
+├── demo_unified_v3.py         # validation suite: ablation, fairer RAG, unified vortices, multi-symbol probe
+├── figures/                   # generated figures
+└── results/
+    └── v3_validation_results.md
+```
+
+Recommended entry points:
+
+```text
+demo_unified_v2.py  -> segmented optimized TideMemory vs RAG
+demo_unified_v3.py  -> validation suite and unified multi-vortex experiments
 ```
 
 ---
 
-## Requirements
+## Installation
 
-```
-torch >= 1.12
-numpy
-matplotlib
+```bash
+pip install -r requirements.txt
 ```
 
-No GPU required. All experiments run on CPU.
+Requirements:
+
+```text
+numpy >= 1.24
+matplotlib >= 3.7
+torch >= 2.0
+```
+
+The current demos run on CPU. GPU is optional but not required.
 
 ---
 
 ## Quick Start
 
+Run the optimized v2 demo:
+
 ```bash
-# 1. Single-memory industrial benchmark (training + full robustness test)
-python main.py
+python demo_unified_v2.py
+```
 
-# 2. Generate visualization figures
-python plot_results.py
+Run the v3 validation suite:
 
-# 3. Multi-memory capacity + AI retrieval comparison
-python demo_unified.py
+```bash
+python demo_unified_v3.py
+```
+
+The v3 suite can take several minutes on CPU because it runs 3D complex-field dynamics, FFT-based colored resonance noise, ablations, and multiple repeated trials.
+
+---
+
+## Key Mechanisms
+
+### 1. Vortex Memory
+
+Each memory is represented by a vortex winding state:
+
+```text
+psi = A(r) exp(i n theta)
+```
+
+where `n` is the topological winding number.
+
+### 2. GL-style Relaxation
+
+The field evolves with a Ginzburg-Landau-inspired update:
+
+```text
+psi <- psi + dt * (laplacian(psi) + alpha * (V_BG^2 - |psi|^2) * psi)
+```
+
+This acts as an attractor-like repair process.
+
+### 3. Unified Background Projection
+
+A background amplitude field pulls corrupted states back toward a stable shell while preserving phase structure.
+
+### 4. Noise-Adaptive Resonance
+
+The resonance frequency is scheduled from a log noise-ratio estimate, with a default log-ratio limit of `2.5`.
+
+### 5. Robust Winding Readout
+
+Readout estimates winding along rings around vortex cores and uses robust statistics to reduce the effect of damaged slices.
+
+---
+
+## Representative Results
+
+The following results are from `demo_unified_v3.py`. Full output is saved in:
+
+```text
+results/v3_validation_results.md
+```
+
+### A-E Ablation, Segmented Storage, N=8
+
+| Mode | sigma=1.5 | sigma=2.0 | sigma=2.5 | sigma=3.0 |
+|---|---:|---:|---:|---:|
+| A_base | 0.891 | 0.438 | 0.172 | 0.000 |
+| B_bg | 0.938 | 0.656 | 0.578 | 0.375 |
+| C_adapt | 0.844 | 0.500 | 0.125 | 0.047 |
+| D_bg_adapt | 0.844 | 0.703 | 0.344 | 0.516 |
+| E_full | 0.938 | 0.797 | 0.750 | 0.625 |
+
+### A-E Ablation, Unified Multi-Vortex Storage, N=8
+
+Unified clean sanity:
+
+```text
+1.000 +/- 0.000
+```
+
+| Mode | sigma=1.5 | sigma=2.0 | sigma=2.5 | sigma=3.0 |
+|---|---:|---:|---:|---:|
+| A_base | 1.000 | 0.958 | 0.125 | 0.000 |
+| B_bg | 1.000 | 1.000 | 1.000 | 0.875 |
+| C_adapt | 1.000 | 0.979 | 0.104 | 0.000 |
+| D_bg_adapt | 1.000 | 1.000 | 0.958 | 0.896 |
+| E_full | 1.000 | 1.000 | 1.000 | 1.000 |
+
+Important: the unified multi-vortex result is an **addressable-memory** experiment. The vortex readout centers are known during readout.
+
+### Stable AI Task + Fairer RAG Baseline
+
+| sigma | TideMemory | RAG cosine | RAG noise-aware |
+|---:|---:|---:|---:|
+| 0.00 | 1.000 | 1.000 | 1.000 |
+| 0.50 | 1.000 | 0.787 | 1.000 |
+| 1.20 | 1.000 | 0.412 | 0.800 |
+| 1.50 | 0.863 | 0.312 | 0.762 |
+| 1.80 | 0.875 | 0.212 | 0.625 |
+| 2.00 | 0.812 | 0.325 | 0.700 |
+| 2.50 | 0.575 | 0.212 | 0.512 |
+| 3.00 | 0.550 | 0.175 | 0.338 |
+
+Note: this comparison uses a controlled cosine/noise-aware vector retrieval baseline, not a production RAG system.
+
+### Multi-Symbol Topological Probe
+
+Alphabet:
+
+```text
+{-2, -1, +1, +2}
+```
+
+| sigma | Segmented | Unified |
+|---:|---:|---:|
+| 0.50 | 1.000 | 1.000 |
+| 1.20 | 0.656 | 0.833 |
+| 2.00 | 0.500 | 0.500 |
+
+This suggests a path beyond binary winding memory, but multi-symbol encoding is still preliminary.
+
+---
+
+## Relationship to RAG
+
+TideMemory is not intended as a drop-in replacement for RAG.
+
+A more realistic role is:
+
+```text
+encoder -> TideMemory robust memory field -> candidate recall -> RAG/reranker/LLM
+```
+
+The current RAG baselines are controlled vector retrieval baselines used to test robustness under storage noise.
+
+---
+
+## Limitations
+
+Please read these limitations before interpreting the results:
+
+1. Current experiments are controlled simulations, not production retrieval benchmarks.
+2. Unified multi-vortex experiments are addressable-memory experiments; readout uses known vortex centers.
+3. The semantic task is simplified compared with real-world RAG.
+4. Current code is CPU-oriented and not optimized.
+5. Multi-symbol encoding is preliminary.
+6. Blind retrieval, address discovery, address noise, real embedding datasets, and learned semantic-to-vortex encoders are future work.
+7. The term "quantum-inspired" should be understood as a computational metaphor involving phase, waves, resonance, and topology. This repository does not claim a new theory of physical quantum mechanics.
+
+---
+
+## Roadmap
+
+Planned next steps:
+
+- Add command-line options for fast/full benchmark modes.
+- Add unified-storage AI fair benchmark.
+- Add address-noise tests for vortex readout centers.
+- Add blind retrieval / address discovery experiments.
+- Add learned encoder from semantic embeddings to vortex parameters.
+- Optimize field dynamics with GPU/CUDA/Triton or cached FFT filters.
+- Add a dual-wave embodied toy-world demo.
+
+---
+
+## Citation / Attribution
+
+If you use this code or build on the idea, please cite or link this repository.
+
+Suggested informal citation:
+
+```text
+TideMemory: A topological field-memory prototype with unified vortex encoding and noise-adaptive resonance repair.
 ```
 
 ---
 
-## Key Results
+## License
 
-### Single Memory (main.py)
-
-| Condition | Acc (before Evo) | Acc (after Evo) | TPR |
-|---|---|---|---|
-| Clean | 1.0000 | 1.0000 | 1.0000 |
-| Phase noise σ=1.0 | ~0.53 | **0.9994** | ~0.999 |
-| Additive noise σ=1.0 | ~0.50 | **0.964** | ~0.96 |
-
-GL evolution recovers **+46% accuracy** under SNR = 0 dB additive noise.
-
-### Multi-Memory Capacity (demo_unified.py)
-
-| N memories | Clean Acc | Noisy Acc (σ=0.5) |
-|---|---|---|
-| 1 | 1.000 | 1.000 |
-| 2 | 1.000 | 1.000 |
-| 4 | 1.000 | 1.000 |
-| 8 | 1.000 | ~0.98 |
-| 16 | ~0.72 | ~0.65 |
-
-### TideMemory vs RAG (AI Retrieval, N=8 items)
-
-| Storage Noise σ | TideMemory Top-1 | RAG (Cosine) Top-1 | Delta |
-|---|---|---|---|
-| 0.0 | 1.000 | 1.000 | 0% |
-| 0.3 | 1.000 | 0.875 | **+12.5%** |
-| 0.5 | 1.000 | 0.575 | **+42.5%** |
-| 0.8 | 0.975 | 0.625 | **+35.0%** |
-| 1.2 | 0.925 | 0.450 | **+47.5%** |
-
-TideMemory significantly outperforms cosine-similarity RAG under high storage noise.
-
----
-
-## Why Topology?
-
-Winding numbers are **discrete topological invariants** — they cannot be changed by continuous deformation of the field. This means:
-
-- Small perturbations (noise) cannot flip the stored bit
-- The GL evolution has discrete attractors at n = ±1, 0
-- Recovery is deterministic, not probabilistic
-
-This is fundamentally different from floating-point vector memories (e.g., RAG embeddings), which degrade continuously under noise.
-
----
-
-## Potential Applications
-
-- **Noise-robust AI memory systems** — long-term memory for LLMs under noisy retrieval/storage conditions
-- **Topological quantum computing simulation** — classical emulator of topological qubit encoding
-- **Error-correcting memory** — physics-inspired alternative to LDPC / surface codes for soft-decision scenarios
-- **Condensed matter / superconductor modeling** — GL field dynamics on discrete lattices
-
----
-
-## Author Note
-
-This is an independent research prototype demonstrating that topological field dynamics can serve as a practical noise-robust memory primitive. Core algorithm, architecture, and experimental design by a single author.
+MIT License. See `LICENSE`.
